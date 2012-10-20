@@ -2,42 +2,36 @@ How to implement PayPal Express checkout for simple (and single) payment on your
 
 PayPal allows their users to implement checkout functions using their API. But implementing the full API is not a piece of cake. There are some libraries on the web, but the most of them are paid, closed or too complex.
 
-If you wanna implement simple and single-item payments (i.e. "pay for service" or "pay for source code"), you can use this library under BSD license.
+If you wanna implement simple and single-item payments (i.e. "pay for service" or "pay for source code"), you can use this library under BSD license. It was initially created by Martin Maly and later refactored by Michal Wiglasz.
 
-How to implement, step-by-step:
+You need your API Name, Password and Signature, as described here: https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_NVPAPIBasics. In a short way, to get these:
+  * Log into PayPal and click Profile.
+  * Click API Access (in the Account Information column).
+  * Click View API Signature.
 
-   1. Download the library
-   2. Get your API Name, Password and Signature, as described here: https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_NVPAPIBasics. In a short way:
-          * Log into PayPal and click Profile.
-          * Click API Access from the Profile menu.
-          * Click Request API Credentials.
-          * Check Request API signature and click Agree and Submit.
-          * Write down your credentials (Name, Password and Signature)
-          * Click on Done
-   3. Modify the class/paypal.php file:
-          * Write your PayPal credentials in the appropriate place
-          * Change the PP_RETURN and PP_CANCEL URLs
-
-There are demo files in the root folder. Buy script is simple and straightforward: You have to create an instantion of the PayPal class and call its doExpressCheckout method. This method has these parameters:
+There is an example of Nette Presenter, tested with Nette 2.0.6 for PHP 5.3 (see http://nette.org). To make an payment, you have to create an instantion of the PayPal class and call its doExpressCheckout method. This method has these parameters:
 
 $amount
     A desired amount of money
 $desc
     Item description
-$invoice (default: empty)
-    Invoice internal ID. Use if you want to assign the payment to the right invoice.
+$returnUrl
+    When the user confirms the payment, he/she is redirected to this URL (with token and PayerID query string parameters)
+$cancelUrl
+    When the user cancels the payment, he/she is redirected to this URL (with token query string parameter)
 $currency (default: USD)
     Three-letter currency code (List of the currency codes is here: https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_nvp_currency_codes)
+$invoice (default: empty)
+    Invoice internal ID. Use if you want to assign the payment to the right invoice.
 
-If everything is OK, the user is redirected to PayPal page to log in and confirm the payment, so the script execution ends. If something was wrong, method returns an array with an error information (see Response codes: https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_nvp_NVPAPIOverview#id08696I00GBL__id08696I070PM).
+If everything is OK, the user is redirected to PayPal page to log in and confirm the payment, so the script execution ends. If something was wrong, method throws a PayPalException containing an array with error information (see Response codes: https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_nvp_NVPAPIOverview#id08696I00GBL__id08696I070PM).
 
-After all, the buyer come to PP_RETURN url, or to PP_CANCEL.
+After all, the buyer is redirected to the "return" or "cancel" page.
 
 At the "cancel" page you haven't to do anything special, just say something like "Your payment was cancelled".
 
-At the "return" page (check ppreturn.php) you have to do one simple operation - call the doPayment() method of the PayPal object. This method confirms the money transfer and executes it. The doPayment() method returns the response code you can use to decide if the payment is OK (and display serial number or unlock the access or something else).
+At the "return" page you have to do one simple operation - call the doPayment() method of the PayPal object. This method confirms the money transfer and executes it. The doPayment() method returns the (besides other information) response code you can use to decide if the payment is OK (and display serial number or unlock the access or something else).
 
-You can call the getCheckoutDetails() method to obtain the detail information about the transaction too, e.g. mail or invoice number
+You can call the getCheckoutDetails() method to obtain the detail information about the transaction too, e.g. mail or invoice number.
 
-If you want to play with this library at PayPal Sandbox, you have to generate PayPal object as new PayPal();  - to prevent unwanted side effect, such as money loose... ;) 
-On the production server you have use new PayPal(true); which indicated you're connected to "live" PayPal, not sandbox.
+To prevent unwanted side effect, such as money loose, it is recommended to play with this library at PayPal Sandbox (https://developer.paypal.com). You need to create a new account there (as a developer) and then two sandbox user accounts, one for seller and one for buyer. If you create the PayPal object with $realPaypal argument set to TRUE, the library will work with real PayPal (and the money will be really transfered).
