@@ -17,6 +17,11 @@
  */
 
 
+
+namespace PayPal;
+
+
+
 class HTTPRequest {
 
 	private $host;
@@ -61,8 +66,8 @@ class HTTPRequest {
 			$responseHeader.= fread($fp, 1);
 		}
 		while (!preg_match('/\\r\\n\\r\\n$/', $responseHeader));
-			
-			
+
+
 		if (!strstr($responseHeader, "Transfer-Encoding: chunked"))
 		{
 			while (!feof($fp))
@@ -76,9 +81,9 @@ class HTTPRequest {
 			while ($chunk_length = hexdec(fgets($fp)))
 			{
 				$responseContentChunk = '';
-				 
+
 				$read_length = 0;
-				 
+
 				while ($read_length < $chunk_length)
 				{
 					$responseContentChunk .= fread($fp, $chunk_length - $read_length);
@@ -86,17 +91,17 @@ class HTTPRequest {
 				}
 
 				$responseContent.= $responseContentChunk;
-				 
+
 				fgets($fp);
-				 
+
 			}
-			 
+
 		}
 
 		$this->header = chop($responseHeader);
 		$this->content = $responseContent;
 		$this->parsedHeader = $this->headerParse();
-		
+
 		$code = intval(trim(substr($this->parsedHeader[0], 9)));
 
 		return $code;
@@ -123,7 +128,7 @@ class HTTPRequest {
 
 	public function getContent() {return $this->content;}
 	public function getHeader() {return $this->parsedHeader;}
-	
+
 
 }
 

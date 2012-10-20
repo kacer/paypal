@@ -7,8 +7,11 @@
  * @copyright (C) 2008 martin maly
  * @see  http://www.php-suit.com/paypal
  * 2.10.2008 20:30:40
+ *
+ * @author Michal Wiglasz - michalwiglasz.cz
+ * 20.10.2012
  */
- 
+
 /*
 * Copyright (c) 2008 Martin Maly - http://www.php-suit.com
 * All rights reserved.
@@ -36,23 +39,45 @@
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-class PayPal {
 
-	//these constants you have to obtain from PayPal
-	//Step-by-step manual is here: https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_NVPAPIBasics
-	const API_USERNAME = "seller_1292143286_biz_api1.maly.cz";
-	const API_PASSWORD = "Q7*******JE";
-	const API_SIGNATURE = "AFcW*****V6l";
-	const PP_RETURN = "http://test/pp/ppreturn.php";
-	const PP_CANCEL = "http://test/pp/ppcancel.php";
+
+namespace PayPal;
+
+
+
+class PayPal {
+	private $apiUsername;
+	private $apiPassword;
+	private $apiSignature;
 
 	private $endpoint;
 	private $host;
 	private $gate;
 
-	function __construct($real = false) {
+
+
+	/**
+	 * Constructor.
+	 *
+	 * To get your API credentials:
+	 *   - Log into PayPal and click Profile.
+     *   - Click API Access (in the Account Information column).
+     *   - Click View API Signature.
+     *
+	 * Also @see https://cms.paypal.com/us/cgi-bin/?cmd=_render-content&content_ID=developer/e_howto_api_NVPAPIBasics
+	 *
+	 * @param string $apiUsername
+	 * @param string $apiPassword
+	 * @param string $apiSignature
+	 * @param bool $realPaypal If FALSE, the sandbox will be used instead of the real PayPal
+	 */
+	function __construct($apiUsername, $apiPassword, $apiSignature, $realPaypal = FALSE) {
+		$this->apiUsername = $apiUsername;
+		$this->apiPassword = $apiPassword;
+		$this->apiSignature = $apiSignature;
+
 		$this->endpoint = '/nvp';
-		if ($real) {
+		if ($realPaypal) {
 			$this->host = "api-3t.paypal.com";
 			$this->gate = 'https://www.paypal.com/cgi-bin/webscr?';
 		} else {
@@ -62,69 +87,69 @@ class PayPal {
 		}
 	}
 
-	/**
-	 * @return HTTPRequest
-	 */
-	private function response($data){
-		$r = new HTTPRequest($this->host, $this->endpoint, 'POST', true);
-		$result = $r->connect($data);
-		if ($result<400) return $r;
-		return false;
-	}
 
-	private function buildQuery($data = array()){
-		$data['USER'] = self::API_USERNAME;
-		$data['PWD'] = self::API_PASSWORD;
-		$data['SIGNATURE'] = self::API_SIGNATURE;
-		$data['VERSION'] = '52.0';
-		$query = http_build_query($data);
-		return $query;
-	}
 
-	
 	/**
 	 * Main payment function
-	 * 
+	 *
 	 * If OK, the customer is redirected to PayPal gateway
-	 * If error, the error info is returned
-	 * 
+	 * If error, raises PayPalException
+	 *
 	 * @param float $amount Amount (2 numbers after decimal point)
 	 * @param string $desc Item description
-	 * @param string $invoice Invoice number (can be omitted)
+	 * @param string $returnUrl Callback URL if user confirms payment
+	 * @param string $cancelUrl Callback URL if user cancels payment
 	 * @param string $currency 3-letter currency code (USD, GBP, CZK etc.)
-	 * 
+	 * @param string $invoice Invoice number (can be omitted)
+	 *
 	 * @return array error info
+	 *
+	 * @throws HTTPException
+	 * @throws PayPalException
 	 */
-	public function doExpressCheckout($amount, $desc, $invoice='', $currency='USD'){
+	public function doExpressCheckout($amount, $desc, $returnUrl, $cancelUrl, $currency='USD', $invoice=''){
 		$data = array(
-		'PAYMENTACTION' =>'Sale',
-		'AMT' =>$amount,
-		'RETURNURL' => self::PP_RETURN,
-		'CANCELURL'  => self::PP_CANCEL,
-		'DESC'=>$desc,
-		'NOSHIPPING'=>"1",
-		'ALLOWNOTE'=>"1",
-		'CURRENCYCODE'=>$currency,
-		'METHOD' =>'SetExpressCheckout');
-		
+			'PAYMENTACTION' =>'Sale',
+			'AMT' => $amount,
+			'RETURNURL' => $returnUrl,
+			'CANCELURL' => $cancelUrl,
+			'DESC'=> $desc,
+			'NOSHIPPING' => "1",
+			'ALLOWNOTE' => "1",
+			'CURRENCYCODE' => $currency,
+			'METHOD' =>'SetExpressCheckout'
+		);
+
 		$data['CUSTOM'] = $amount.'|'.$currency.'|'.$invoice;
 		if ($invoice) $data['INVNUM'] = $invoice;
 
 		$query = $this->buildQuery($data);
 
 		$result = $this->response($query);
-
-		if (!$result) return false;
 		$response = $result->getContent();
 		$return = $this->responseParse($response);
 
 		if ($return['ACK'] == 'Success') {
 			header('Location: '.$this->gate.'cmd=_express-checkout&useraction=commit&token='.$return['TOKEN'].'');
 			die();
+
+		} else {
+			throw new PayPalException($return);
 		}
-		return($return);
 	}
 
+
+
+	/**
+	 * Returns additional information about the payment.
+	 *
+	 * @param string $token Payment token
+	 *
+	 * @return array
+  	 *
+	 * @throws HTTPException
+	 * @throws PayPalException
+	 */
 	public function getCheckoutDetails($token){
 		$data = array(
 		'TOKEN' => $token,
@@ -132,32 +157,50 @@ class PayPal {
 		$query = $this->buildQuery($data);
 
 		$result = $this->response($query);
-
-		if (!$result) return false;
 		$response = $result->getContent();
 		$return = $this->responseParse($response);
+
+		if ($return['ACK'] != 'Success') {
+			throw new PayPalException($return);
+		}
+
 		return($return);
 	}
-	public function doPayment(){
-		$token = $_GET['token'];
-		$payer = $_GET['PayerID'];
+
+
+
+	/**
+	 * Confirms payment. Should be called in the Return callback page.
+	 *
+	 * @param string $token Payment Token (passed by PayPal as 'token' GET query param)
+	 * @param string $payerId Payer ID (passed by PayPal as 'PayerID' GET query param),
+	 *
+	 * @return array Payment info (keys: AMT, CURRENCYCODE, PAYMENTSTATUS, PENDINGREASON, REASONCODE)
+	 *
+	 * @throws HTTPException
+	 * @throws PayPalException
+	 */
+	public function doPayment($token, $payerId){
 		$details = $this->getCheckoutDetails($token);
 		if (!$details) return false;
 		list($amount,$currency,$invoice) = explode('|',$details['CUSTOM']);
 		$data = array(
-		'PAYMENTACTION' => 'Sale',
-		'PAYERID' => $payer,
-		'TOKEN' =>$token,
-		'AMT' => $amount,
-		'CURRENCYCODE'=>$currency,
-		'METHOD' =>'DoExpressCheckoutPayment');
+			'PAYMENTACTION' => 'Sale',
+			'PAYERID' => $payerId,
+			'TOKEN' =>$token,
+			'AMT' => $amount,
+			'CURRENCYCODE'=>$currency,
+			'METHOD' =>'DoExpressCheckoutPayment'
+		);
 		$query = $this->buildQuery($data);
 
 		$result = $this->response($query);
-
-		if (!$result) return false;
 		$response = $result->getContent();
 		$return = $this->responseParse($response);
+
+		if ($return['ACK'] != 'Success') {
+			throw new PayPalException($return);
+		}
 
 		/*
 		 * [AMT] => 10.00
@@ -170,6 +213,35 @@ class PayPal {
 		return($return);
 	}
 
+
+
+	/**
+	 * @return HTTPRequest
+	 * @throws HTTPException
+	 */
+	private function response($data){
+		$r = new HTTPRequest($this->host, $this->endpoint, 'POST', true);
+		$result = $r->connect($data);
+		if ($result<400) {
+			return $r;
+		} else {
+			throw new HTTPException("Request failed with code '$result'.", $result);
+		}
+	}
+
+
+
+	private function buildQuery($data = array()){
+		$data['USER'] = $this->apiUsername;
+		$data['PWD'] = $this->apiPassword;
+		$data['SIGNATURE'] = $this->apiSignature;
+		$data['VERSION'] = '52.0';
+		$query = http_build_query($data);
+		return $query;
+	}
+
+
+
 	private function getScheme() {
 		$scheme = 'http';
 		if (isset($_SERVER['HTTPS']) and $_SERVER['HTTPS'] == 'on') {
@@ -177,6 +249,8 @@ class PayPal {
 		}
 		return $scheme;
 	}
+
+
 
 	private function responseParse($resp){
 		$a=explode("&", $resp);
@@ -196,4 +270,3 @@ class PayPal {
 	}
 }
 
-?>
